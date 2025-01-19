@@ -6,10 +6,14 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "seed": "ts-node scripts/seed-database.ts"
   },
   "dependencies": {
+    "dotenv": "^16.4.7",
     "firebase": "^11.2.0",
+    "firebase-admin": "^13.0.2",
+    "js-cookie": "^3.0.5",
     "lucide-react": "^0.473.0",
     "next": "15.1.5",
     "react": "^19.0.0",
@@ -18,6 +22,7 @@
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
+    "@types/js-cookie": "^3.0.6",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
