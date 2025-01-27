@@ -2,7 +2,7 @@
 import { initializeApp, getApps, cert, App } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getAuth } from 'firebase-admin/auth';
-
+import { getStorage } from 'firebase-admin/storage';
 let app: App;
 
 if (!getApps().length) {
@@ -10,7 +10,7 @@ if (!getApps().length) {
     credential: cert({
       projectId: process.env.FIREBASE_PROJECT_ID,
       clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+      privateKey: process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n')
     }),
   });
 } else {
@@ -20,3 +20,4 @@ if (!getApps().length) {
 export const adminApp = app;
 export const adminDb = getFirestore(app);
 export const adminAuth = getAuth(app);
+export const storage = getStorage(app);

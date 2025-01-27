@@ -1,3 +1,4 @@
+// /api/products/route.ts
 import { NextResponse } from 'next/server';
 import { adminDb } from '@/lib/firebase';
 
@@ -17,10 +18,28 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const data = await request.json();
-    const docRef = await adminDb.collection('products').add(data);
+    // If there's an existing product with this image, you might want to delete the old image from storage
+    const docRef = await adminDb.collection('products').add({
+      ...data,
+      createdAt: new Date().toISOString(),
+    });
     return NextResponse.json({ id: docRef.id, ...data });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to add product' }, { status: 500 });
+  }
+}
+
+export async function PUT(request: Request) {
+  const { id, ...data } = await request.json();
+  try {
+    // If updating image, you might want to delete the old image from storage
+    await adminDb.collection('products').doc(id).update({
+      ...data,
+      updatedAt: new Date().toISOString(),
+    });
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    return NextResponse.json({ error: 'Failed to update product' }, { status: 500 });
   }
 }
 
@@ -31,15 +50,5 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to delete product' }, { status: 500 });
-  }
-}
-
-export async function PUT(request: Request) {
-  const { id, ...data } = await request.json();
-  try {
-    await adminDb.collection('products').doc(id).update(data);
-    return NextResponse.json({ success: true });
-  } catch (error) {
-    return NextResponse.json({ error: 'Failed to update product' }, { status: 500 });
   }
 }

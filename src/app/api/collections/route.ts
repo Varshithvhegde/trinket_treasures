@@ -24,3 +24,26 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Failed to add collection' }, { status: 500 });
   }
 }
+
+export async function PUT(request: Request) {
+  try {
+    const { id, ...data } = await request.json();
+    await adminDb.collection('collections').doc(id).update({
+      ...data,
+      updatedAt: new Date().toISOString()
+    });
+    return NextResponse.json({ id, ...data });
+  } catch (error) {
+    return NextResponse.json({ error: 'Failed to update collection' }, { status: 500 });
+  }
+}
+
+export async function DELETE(request: Request) {
+  try {
+    const { id } = await request.json();
+    await adminDb.collection('collections').doc(id).delete();
+    return NextResponse.json({ id });
+  } catch (error) {
+    return NextResponse.json({ error: 'Failed to delete collection' }, { status: 500 });
+  }
+}

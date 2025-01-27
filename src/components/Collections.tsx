@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 interface Collection {
   id: string;
   name: string;
-  image: string;
+  imageURL: string;
   description: string;
 }
 
@@ -67,7 +67,7 @@ export default function Collections() {
             >
               <div className="relative overflow-hidden">
                 <img 
-                  src={collection.image} 
+                  src={collection.imageURL} 
                   alt={collection.name}
                   className="w-full h-96 object-cover transform transition-transform duration-500 group-hover:scale-110"
                 />
