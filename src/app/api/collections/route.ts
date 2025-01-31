@@ -1,4 +1,4 @@
-// app/api/collections/route.ts
+// src/app/api/collections/route.ts
 import { NextResponse } from 'next/server';
 import { adminDb } from '@/lib/firebase';
 

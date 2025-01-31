@@ -1,6 +1,5 @@
-'use client';
-
-import { useEffect, useState } from 'react';
+// src/app/collections/page.tsx
+import { adminDb } from '@/lib/firebase';
 
 interface Collection {
   id: string;
@@ -9,45 +8,24 @@ interface Collection {
   description: string;
 }
 
-export default function Collections() {
-  const [collections, setCollections] = useState<Collection[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+// In Next.js 13+, this replaces getStaticProps
+async function getCollections() {
+  const collectionsSnapshot = await adminDb.collection('collections').get();
+  const collections = collectionsSnapshot.docs.map(doc => ({
+    id: doc.id,
+    ...doc.data()
+  })) as Collection[];
+  
+  return collections;
+}
 
-  useEffect(() => {
-    const fetchCollections = async () => {
-      try {
-        const response = await fetch('/api/collections');
-        if (!response.ok) {
-          throw new Error('Failed to fetch collections');
-        }
-        const data = await response.json();
-        console.log(data);
-        setCollections(data);
-        setLoading(false);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'An unknown error occurred');
-        setLoading(false);
-      }
-    };
+export const revalidate = 3600; // Revalidate every hour
 
-    fetchCollections();
-  }, []);
+export default async function Collections() {
+  const collections = await getCollections();
 
-  if (loading) {
-    return (
-      <section className="py-16 bg-neutral-50 flex items-center justify-center">
-        <div className="animate-pulse text-neutral-600">Loading Collections...</div>
-      </section>
-    );
-  }
-
-  if (error) {
-    return (
-      <section className="py-16 bg-neutral-50 text-center">
-        <p className="text-red-600">{error}</p>
-      </section>
-    );
+  if (!collections.length) {
+    return <></>;
   }
 
   return (
@@ -70,6 +48,7 @@ export default function Collections() {
                   src={collection.imageURL} 
                   alt={collection.name}
                   className="w-full h-96 object-cover transform transition-transform duration-500 group-hover:scale-110"
+                  loading="lazy"
                 />
                 <div className="absolute inset-0 bg-black opacity-0 group-hover:opacity-40 transition-opacity"></div>
               </div>
