@@ -1,6 +1,7 @@
+// Admin Dashboard - Collections Page
 "use client"
-import React, { useState, useEffect } from 'react';
-import { Plus, Loader2, Search, Filter, MoreVertical, Edit, Trash2 } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Plus, Loader2, Search, Filter, MoreVertical, Edit, Trash2, Upload } from 'lucide-react';
 import {
   Card,
   CardContent,
@@ -24,13 +25,47 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { storage } from '@/lib/firebase-client';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
 const CollectionForm = ({ onSubmit, initialData }) => {
   const [formData, setFormData] = useState(initialData);
-
-  const handleSubmit = (e) => {
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState(initialData.imageURL);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef(null);
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    onSubmit(formData);
+    setUploading(true);
+    
+    try {
+      let imageURL = formData.imageURL;
+      
+      if (imageFile) {
+        const fileName = `collections/${Date.now()}-${imageFile.name}`;
+        const storageRef = ref(storage, fileName);
+        await uploadBytes(storageRef, imageFile);
+        imageURL = await getDownloadURL(storageRef);
+      }
+      
+      await onSubmit({ ...formData, imageURL });
+    } catch (error) {
+      console.error('Error uploading image:', error);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleImageChange = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setImageFile(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setImagePreview(reader.result);
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleChange = (field, value) => {
@@ -53,6 +88,47 @@ const CollectionForm = ({ onSubmit, initialData }) => {
       </div>
 
       <div className="space-y-2">
+        <Label>Collection Image</Label>
+        <div className="flex flex-col items-center p-4 border-2 border-dashed rounded-lg">
+          {imagePreview ? (
+            <div className="relative w-full max-w-xs">
+              <img
+                src={imagePreview}
+                alt="Preview"
+                className="w-full h-48 object-cover rounded"
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                className="absolute bottom-2 right-2"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                Change
+              </Button>
+            </div>
+          ) : (
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full h-48 flex flex-col items-center justify-center gap-2"
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Upload className="h-8 w-8" />
+              <span>Click to upload image</span>
+            </Button>
+          )}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={handleImageChange}
+          />
+        </div>
+      </div>
+
+      <div className="space-y-2">
         <Label htmlFor="description">Description</Label>
         <Textarea
           id="description"
@@ -62,18 +138,15 @@ const CollectionForm = ({ onSubmit, initialData }) => {
         />
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="imageURL">Image URL</Label>
-        <Input
-          id="imageURL"
-          value={formData.imageURL}
-          onChange={(e) => handleChange('imageURL', e.target.value)}
-          required
-        />
-      </div>
-
-      <Button type="submit" className="w-full">
-        {initialData.id ? 'Update Collection' : 'Add Collection'}
+      <Button type="submit" className="w-full" disabled={uploading}>
+        {uploading ? (
+          <>
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            {initialData.id ? 'Updating Collection...' : 'Adding Collection...'}
+          </>
+        ) : (
+          initialData.id ? 'Update Collection' : 'Add Collection'
+        )}
       </Button>
     </form>
   );

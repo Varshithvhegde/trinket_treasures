@@ -1,3 +1,4 @@
+//admin dashboard for products
 "use client"
 import React, { useState, useEffect ,useRef } from 'react';
 import { Plus, Loader2, Search, Filter, MoreVertical, Edit, Trash2,Upload } from 'lucide-react';

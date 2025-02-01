@@ -24,7 +24,7 @@ async function getFeaturedItems() {
 
 export const revalidate = 3600; // Revalidate every hour
 
-export default async function Featured() {
+export default async function Featured() {  
   const featuredItems = await getFeaturedItems();
   if (!featuredItems.length) {
     return <></>;
