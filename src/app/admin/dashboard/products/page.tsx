@@ -30,7 +30,13 @@ import { storage } from '@/lib/firebase-client'; // Make sure to import storage 
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import ProtectedRoute from '@/components/ProtectedRoute';
 
-const ProductForm = ({ onSubmit, initialData, collections }) => {
+interface ProductFormProps {
+  onSubmit: (formData: any) => void;
+  initialData: any;
+  collections: { id: string; name: string }[];
+}
+
+const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, initialData, collections }) => {
   const [formData, setFormData] = useState(initialData);
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(initialData.imageURL);

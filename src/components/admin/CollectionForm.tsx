@@ -53,6 +53,8 @@ export default function CollectionForm({ initialData, mode }: CollectionFormProp
         </label>
         <input
           type="text"
+          title="Collection Name"
+          placeholder="Enter collection name"
           value={formData.name}
           onChange={(e) => setFormData({ ...formData, name: e.target.value })}
           className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm"
@@ -64,6 +66,8 @@ export default function CollectionForm({ initialData, mode }: CollectionFormProp
           Description
         </label>
         <textarea
+          title="Description"
+          placeholder="Enter collection description"
           value={formData.description}
           onChange={(e) => setFormData({ ...formData, description: e.target.value })}
           className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm"

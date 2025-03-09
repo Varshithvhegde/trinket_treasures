@@ -9,6 +9,7 @@ export async function GET() {
       id: doc.id,
       ...doc.data(),
     }));
+    console.log(products);
     return NextResponse.json(products);
   } catch (error) {
     return NextResponse.json({ error: 'Failed to fetch products' }, { status: 500 });

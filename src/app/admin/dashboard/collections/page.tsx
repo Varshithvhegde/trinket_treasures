@@ -28,21 +28,33 @@ import { Textarea } from "@/components/ui/textarea";
 import { storage } from '@/lib/firebase-client';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 
-const CollectionForm = ({ onSubmit, initialData }) => {
+interface CollectionFormProps {
+  onSubmit: (data: any) => Promise<void>;
+  initialData: {
+    id?: string;
+    name: string;
+    description: string;
+    imageURL: string;
+  };
+}
+
+const CollectionForm: React.FC<CollectionFormProps> = ({ onSubmit, initialData }) => {
   const [formData, setFormData] = useState(initialData);
-  const [imageFile, setImageFile] = useState(null);
+  const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState(initialData.imageURL);
   const [uploading, setUploading] = useState(false);
-  const fileInputRef = useRef(null);
-  const handleSubmit = async (e) => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  interface HandleSubmitEvent extends React.FormEvent<HTMLFormElement> {}
+
+  const handleSubmit = async (e: HandleSubmitEvent) => {
     e.preventDefault();
     setUploading(true);
     
     try {
-      let imageURL = formData.imageURL;
+      let imageURL: string = formData.imageURL;
       
       if (imageFile) {
-        const fileName = `collections/${Date.now()}-${imageFile.name}`;
+        const fileName: string = `collections/${Date.now()}-${imageFile.name}`;
         const storageRef = ref(storage, fileName);
         await uploadBytes(storageRef, imageFile);
         imageURL = await getDownloadURL(storageRef);
@@ -56,19 +68,30 @@ const CollectionForm = ({ onSubmit, initialData }) => {
     }
   };
 
-  const handleImageChange = (e) => {
-    const file = e.target.files[0];
+  interface ImageChangeEvent extends React.ChangeEvent<HTMLInputElement> {}
+
+  const handleImageChange = (e: ImageChangeEvent) => {
+    const file = e.target.files?.[0];
     if (file) {
       setImageFile(file);
       const reader = new FileReader();
       reader.onloadend = () => {
-        setImagePreview(reader.result);
+        if (typeof reader.result === 'string') {
+          setImagePreview(reader.result);
+        }
       };
       reader.readAsDataURL(file);
     }
   };
 
-  const handleChange = (field, value) => {
+  interface FormData {
+    id?: string;
+    name: string;
+    description: string;
+    imageURL: string;
+  }
+
+  const handleChange = (field: keyof FormData, value: string) => {
     setFormData(prev => ({
       ...prev,
       [field]: value
@@ -124,6 +147,7 @@ const CollectionForm = ({ onSubmit, initialData }) => {
             accept="image/*"
             className="hidden"
             onChange={handleImageChange}
+            title="Upload Image"
           />
         </div>
       </div>
@@ -153,10 +177,10 @@ const CollectionForm = ({ onSubmit, initialData }) => {
 };
 
 const CollectionsDashboard = () => {
-  const [collections, setCollections] = useState([]);
+  const [collections, setCollections] = useState<Collection[]>([]);
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingCollection, setEditingCollection] = useState(null);
+  const [editingCollection, setEditingCollection] = useState<Collection | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
   const defaultCollection = {
@@ -181,9 +205,17 @@ const CollectionsDashboard = () => {
     }
   };
 
-  const handleSubmit = async (formData) => {
-    const method = editingCollection ? 'PUT' : 'POST';
-    const body = editingCollection 
+  interface FormData {
+    id?: string;
+    name: string;
+    description: string;
+    imageURL: string;
+    createdAt?: string;
+  }
+
+  const handleSubmit = async (formData: FormData) => {
+    const method: 'PUT' | 'POST' = editingCollection ? 'PUT' : 'POST';
+    const body: FormData = editingCollection 
       ? { id: editingCollection.id, ...formData }
       : { ...formData, createdAt: new Date().toISOString() };
 
@@ -201,20 +233,38 @@ const CollectionsDashboard = () => {
     }
   };
 
-  const handleDelete = async (id) => {
+  interface DeleteCollectionResponse {
+    success: boolean;
+    message: string;
+  }
+
+  const handleDelete = async (id: string): Promise<void> => {
     try {
-      await fetch('/api/collections', {
+      const response = await fetch('/api/collections', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id })
       });
-      fetchCollections();
+      const result: DeleteCollectionResponse = await response.json();
+      if (result.success) {
+        fetchCollections();
+      } else {
+        console.error('Error deleting collection:', result.message);
+      }
     } catch (error) {
       console.error('Error deleting collection:', error);
     }
   };
 
-  const handleEdit = (collection) => {
+  interface Collection {
+    id: string;
+    name: string;
+    description: string;
+    imageURL: string;
+    createdAt: string;
+  }
+
+  const handleEdit = (collection: Collection) => {
     setEditingCollection(collection);
     setIsDialogOpen(true);
   };
