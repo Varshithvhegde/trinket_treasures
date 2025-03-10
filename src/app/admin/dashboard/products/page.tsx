@@ -29,195 +29,15 @@ import { Switch } from "@/components/ui/switch";
 import { storage } from '@/lib/firebase-client'; // Make sure to import storage from your firebase config
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import ProtectedRoute from '@/components/ProtectedRoute';
-
-interface ProductFormProps {
-  onSubmit: (formData: any) => void;
-  initialData: any;
-  collections: { id: string; name: string }[];
-}
-
-const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, initialData, collections }) => {
-  const [formData, setFormData] = useState(initialData);
-  const [imageFile, setImageFile] = useState(null);
-  const [imagePreview, setImagePreview] = useState(initialData.imageURL);
-  const [uploading, setUploading] = useState(false);
-  const fileInputRef = useRef(null);
-  
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setUploading(true);
-    
-    try {
-      let imageURL = formData.imageURL;
-      
-      if (imageFile) {
-        const fileName = `products/${Date.now()}-${imageFile.name}`;
-        const storageRef = ref(storage, fileName);
-        await uploadBytes(storageRef, imageFile);
-        imageURL = await getDownloadURL(storageRef);
-      }
-      
-      await onSubmit({ ...formData, imageURL });
-    } catch (error) {
-      // print the logged user
-      
-      console.error('Error uploading image:', error);
-    } finally {
-      setUploading(false);
-    }
-  };
-
-
-  const handleImageChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      setImageFile(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImagePreview(reader.result);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleChange = (field, value) => {
-    setFormData(prev => ({
-      ...prev,
-      [field]: value
-    }));
-  };
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
-        <div className="space-y-2">
-          <Label htmlFor="name">Product Name</Label>
-          <Input
-            id="name"
-            value={formData.name}
-            onChange={(e) => handleChange('name', e.target.value)}
-            required
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="price">Price</Label>
-          <Input
-            id="price"
-            value={formData.price}
-            onChange={(e) => handleChange('price', e.target.value)}
-            required
-          />
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <Label>Product Image</Label>
-        <div className="flex flex-col items-center p-4 border-2 border-dashed rounded-lg">
-          {imagePreview ? (
-            <div className="relative w-full max-w-xs">
-              <img
-                src={imagePreview}
-                alt="Preview"
-                className="w-full h-48 object-cover rounded"
-              />
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                className="absolute bottom-2 right-2"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                Change
-              </Button>
-            </div>
-          ) : (
-            <Button
-              type="button"
-              variant="outline"
-              className="w-full h-48 flex flex-col items-center justify-center gap-2"
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <Upload className="h-8 w-8" />
-              <span>Click to upload image</span>
-            </Button>
-          )}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={handleImageChange}
-          />
-        </div>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="collections">Collection</Label>
-        <select
-          id="collections"
-          className="w-full p-2 border rounded"
-          value={formData.collections}
-          onChange={(e) => handleChange('collections', e.target.value)}
-          required
-        >
-          <option value="">Select Collection</option>
-          {collections.map((collection) => (
-            <option key={collection.id} value={collection.id}>
-              {collection.name}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div className="space-y-2">
-        <Label htmlFor="description">Description</Label>
-        <Textarea
-          id="description"
-          value={formData.description}
-          onChange={(e) => handleChange('description', e.target.value)}
-          required
-        />
-      </div>
-
-      <div className="flex items-center space-x-4">
-        <div className="flex items-center space-x-2">
-          <Switch
-            id="featured"
-            checked={formData.featured}
-            onCheckedChange={(checked) => handleChange('featured', checked)}
-          />
-          <Label htmlFor="featured">Featured</Label>
-        </div>
-        <div className="flex items-center space-x-2">
-          <Switch
-            id="inStock"
-            checked={formData.inStock}
-            onCheckedChange={(checked) => handleChange('inStock', checked)}
-          />
-          <Label htmlFor="inStock">In Stock</Label>
-        </div>
-      </div>
-
-      <Button type="submit" className="w-full" disabled={uploading}>
-        {uploading ? (
-          <>
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            {initialData.id ? 'Updating Product...' : 'Adding Product...'}
-          </>
-        ) : (
-          initialData.id ? 'Update Product' : 'Add Product'
-        )}
-      </Button>
-    </form>
-  );
-};
+import ProductForm from '@/components/admin/ProductForm';
 
 const ProductDashboard = () => {
-  const [products, setProducts] = useState([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [collections, setCollections] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [editingProduct, setEditingProduct] = useState(null);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
   const defaultProduct = {
@@ -257,10 +77,34 @@ const ProductDashboard = () => {
     }
   };
 
-  const handleSubmit = async (formData) => {
+  const fetchCategories = async () => {
+    try {
+      const response = await fetch('/api/categories/getAllCollectionsList');
+      const data = await response.json();
+      setCategories(data);
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+    }
+  };
+
+  interface Product {
+    id?: string;
+    name: string;
+    price: string;
+    collections: string;
+    featured: boolean;
+    description: string;
+    inStock: boolean;
+    imageURL: string;
+    category?: string;
+  }
+
+  interface FormData extends Omit<Product, 'id'> {}
+
+  const handleSubmit = async (formData: FormData): Promise<void> => {
     const method = editingProduct ? 'PUT' : 'POST';
     const url = '/api/products';
-    const body = editingProduct 
+    const body: Product = editingProduct 
       ? { id: editingProduct.id, ...formData }
       : formData;
 
@@ -278,7 +122,11 @@ const ProductDashboard = () => {
     }
   };
 
-  const handleDelete = async (id) => {
+  interface DeleteResponse {
+    success: boolean;
+  }
+
+  const handleDelete = async (id: string): Promise<void> => {
     try {
       await fetch('/api/products', {
         method: 'DELETE',
@@ -291,7 +139,7 @@ const ProductDashboard = () => {
     }
   };
 
-  const handleEdit = (product) => {
+  const handleEdit = (product: Product) => {
     setEditingProduct(product);
     setIsDialogOpen(true);
   };
@@ -327,7 +175,7 @@ const ProductDashboard = () => {
                 {editingProduct ? 'Edit Product' : 'Add New Product'}
               </DialogTitle>
             </DialogHeader>
-            <ProductForm 
+            <ProductForm
               onSubmit={handleSubmit}
               initialData={editingProduct || defaultProduct}
               collections={collections}
@@ -368,6 +216,7 @@ const ProductDashboard = () => {
                   <tr>
                     <th className="px-6 py-3">Product</th>
                     <th className="px-6 py-3">Collection</th>
+                    <th className="px-6 py-3">Category</th>
                     <th className="px-6 py-3">Price</th>
                     <th className="px-6 py-3">Status</th>
                     <th className="px-6 py-3">Featured</th>
@@ -389,6 +238,7 @@ const ProductDashboard = () => {
                         </div>
                       </td>
                       <td className="px-6 py-4">{product.collections}</td>
+                      <td className="px-6 py-4">{product.category || '-'}</td>
                       <td className="px-6 py-4">{product.price}</td>
                       <td className="px-6 py-4">
                         <span className={`px-2 py-1 rounded-full text-xs ${
@@ -418,7 +268,7 @@ const ProductDashboard = () => {
                             </DropdownMenuItem>
                             <DropdownMenuItem 
                               className="text-red-600"
-                              onClick={() => handleDelete(product.id)}
+                              onClick={() => product.id ? handleDelete(product.id) : null}
                             >
                               <Trash2 className="h-4 w-4 mr-2" />
                               Delete

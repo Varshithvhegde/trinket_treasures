@@ -1,28 +1,29 @@
 // src/app/search/page.tsx
-"use client"
+"use client";
 
-import { useState, useEffect } from 'react'
-import { useSearchParams } from 'next/navigation'
-import Navbar from '@/components/Navbar'
-import Footer from '@/components/Footer'
-import { Input } from "@/components/ui/input"
-import { Button } from "@/components/ui/button"
-import { Slider } from "@/components/ui/slider"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Card, CardContent } from "@/components/ui/card"
+import { useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
+import Navbar from "@/components/Navbar";
+import Footer from "@/components/Footer";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Slider } from "@/components/ui/slider";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
+} from "@/components/ui/select";
 import {
   Accordion,
   AccordionContent,
   AccordionItem,
   AccordionTrigger,
-} from "@/components/ui/accordion"
+} from "@/components/ui/accordion";
+import Product from "@/components/Product";
 
 interface Product {
   id: string;
@@ -32,177 +33,210 @@ interface Product {
   description: string;
   featured: boolean;
   inStock: boolean;
-  collection: string;
+  collections: string; // Collection ID
   category?: string;
 }
 
-export default function SearchPage() {
-  const searchParams = useSearchParams()
-  const collectionParam = searchParams.get('collection')
-  
-  const [products, setProducts] = useState<Product[]>([])
-  const [filteredProducts, setFilteredProducts] = useState<Product[]>([])
-  const [collections, setCollections] = useState<string[]>([])
-  const [categories, setCategories] = useState<string[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+interface Collection {
+  id: string;
+  name: string;
+}
 
+export default function SearchPage() {
+  const searchParams = useSearchParams();
+  const collectionParam = searchParams.get("collection");
+
+  const [products, setProducts] = useState<Product[]>([]);
+  const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
+  const [collections, setCollections] = useState<string[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [collectionsMap, setCollectionsMap] = useState<Map<string, string>>(
+    new Map()
+  );
   // Filter states
-  const [searchQuery, setSearchQuery] = useState('')
-  const [selectedCollections, setSelectedCollections] = useState<string[]>(collectionParam ? [collectionParam] : [])
-  const [selectedCategories, setSelectedCategories] = useState<string[]>([])
-  const [priceRange, setPriceRange] = useState([0, 10000])
-  const [inStockOnly, setInStockOnly] = useState(false)
-  const [sortBy, setSortBy] = useState('name_asc')
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCollections, setSelectedCollections] = useState<string[]>(
+    collectionParam ? [collectionParam] : []
+  );
+  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
+  const [priceRange, setPriceRange] = useState([0, 10000]);
+  const [inStockOnly, setInStockOnly] = useState(false);
+  const [sortBy, setSortBy] = useState("name_asc");
 
   // Fetch products from API endpoint
   useEffect(() => {
-    const fetchProducts = async () => {
-      setIsLoading(true)
+    const fetchData = async () => {
+      setIsLoading(true);
       try {
-        // Fetch from our API route instead of directly from Firebase
-        const res = await fetch('/api/products')
-        if (!res.ok) throw new Error('Failed to fetch products')
-        const productsData = await res.json() as Product[]
-        console.log('Products fetched successfully', productsData)
-        const collectionsSet = new Set<string>()
-        const categoriesSet = new Set<string>()
-        
+        // Fetch both products and collections
+        const [productsRes, collectionsRes] = await Promise.all([
+          fetch("/api/products"),
+          fetch("/api/collections/getAllCollectionsList"),
+        ]);
+
+        if (!productsRes.ok || !collectionsRes.ok)
+          throw new Error("Failed to fetch data");
+
+        const productsData = (await productsRes.json()) as Product[];
+        const collectionsData = (await collectionsRes.json()) as Collection[];
+
+        // Create collections mapping
+        const collectionsMapping = new Map<string, string>();
+        collectionsData.forEach((collection) => {
+          collectionsMapping.set(collection.id, collection.name);
+        });
+
+        // Get unique categories from products
+        const categoriesSet = new Set<string>();
         productsData.forEach((product) => {
-          if (product.collection) collectionsSet.add(product.collection)
-          if (product.category) categoriesSet.add(product.category)
-        })
-        
-        setProducts(productsData)
-        setFilteredProducts(productsData)
-        console.log('Filtered products:', filteredProducts)
-        setCollections(Array.from(collectionsSet))
-        setCategories(Array.from(categoriesSet))
+          if (product.category) categoriesSet.add(product.category);
+        });
+
+        setCollectionsMap(collectionsMapping);
+        setProducts(productsData);
+        setFilteredProducts(productsData);
+        setCollections(collectionsData.map((c) => c.name));
+        setCategories(Array.from(categoriesSet));
       } catch (error) {
-        console.error("Error fetching products:", error)
+        console.error("Error fetching data:", error);
       } finally {
-        setIsLoading(false)
+        setIsLoading(false);
       }
-    }
-    
-    fetchProducts()
-  }, [])
+    };
+
+    fetchData();
+  }, []);
 
   // Apply filters
   useEffect(() => {
-    let result = [...products]
-    
-    // Apply collection filter from URL if present
-    if (collectionParam && products.length > 0) {
-      result = result.filter(product => product.collection === collectionParam)
-    }
-    
-    // Filter by search query
-    if (searchQuery) {
-      result = result.filter(product => 
-        product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        product.description.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    }
-    
-    // Filter by collections
+    let result = [...products];
+
+    // Filter by collections using the mapping
     if (selectedCollections.length > 0) {
-      result = result.filter(product => selectedCollections.includes(product.collection))
+      result = result.filter((product) => {
+        const collectionName = collectionsMap.get(product.collections);
+        return collectionName && selectedCollections.includes(collectionName);
+      });
     }
-    
-    // Filter by categories
+
+    // Keep existing filters
+    if (searchQuery) {
+      result = result.filter(
+        (product) =>
+          product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          product.description.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+
     if (selectedCategories.length > 0) {
-      result = result.filter(product => product.category && selectedCategories.includes(product.category))
+      result = result.filter(
+        (product) =>
+          product.category && selectedCategories.includes(product.category)
+      );
     }
-    
+
     // Filter by price range
-    result = result.filter(product => {
-      const price = parseInt(product.price.replace(/[^0-9]/g, ''))
-      return price >= priceRange[0] && price <= priceRange[1]
-    })
-    
+    result = result.filter((product) => {
+      const price = parseInt(product.price.replace(/[^0-9]/g, ""));
+      return price >= priceRange[0] && price <= priceRange[1];
+    });
+
     // Filter by stock status
     if (inStockOnly) {
-      result = result.filter(product => product.inStock)
+      result = result.filter((product) => product.inStock);
     }
-    
+
     // Apply sorting
-    result = sortProducts(result, sortBy)
-    
-    setFilteredProducts(result)
-  }, [products, searchQuery, selectedCollections, selectedCategories, priceRange, inStockOnly, sortBy, collectionParam])
+    result = sortProducts(result, sortBy);
+
+    setFilteredProducts(result);
+  }, [
+    products,
+    searchQuery,
+    selectedCollections,
+    selectedCategories,
+    priceRange,
+    inStockOnly,
+    sortBy,
+    collectionParam,
+    collectionsMap,
+  ]);
 
   // Sort products
   const sortProducts = (products: Product[], sortOption: string) => {
-    const sortedProducts = [...products]
-    
+    const sortedProducts = [...products];
+
     switch (sortOption) {
-      case 'name_asc':
-        return sortedProducts.sort((a, b) => a.name.localeCompare(b.name))
-      case 'name_desc':
-        return sortedProducts.sort((a, b) => b.name.localeCompare(a.name))
-      case 'price_asc':
-        return sortedProducts.sort((a, b) => 
-          parseInt(a.price.replace(/[^0-9]/g, '')) - parseInt(b.price.replace(/[^0-9]/g, '')))
-      case 'price_desc':
-        return sortedProducts.sort((a, b) => 
-          parseInt(b.price.replace(/[^0-9]/g, '')) - parseInt(a.price.replace(/[^0-9]/g, '')))
+      case "name_asc":
+        return sortedProducts.sort((a, b) => a.name.localeCompare(b.name));
+      case "name_desc":
+        return sortedProducts.sort((a, b) => b.name.localeCompare(a.name));
+      case "price_asc":
+        return sortedProducts.sort(
+          (a, b) =>
+            parseInt(a.price.replace(/[^0-9]/g, "")) -
+            parseInt(b.price.replace(/[^0-9]/g, ""))
+        );
+      case "price_desc":
+        return sortedProducts.sort(
+          (a, b) =>
+            parseInt(b.price.replace(/[^0-9]/g, "")) -
+            parseInt(a.price.replace(/[^0-9]/g, ""))
+        );
       default:
-        return sortedProducts
+        return sortedProducts;
     }
-  }
+  };
 
   // Toggle collection filter
   const toggleCollection = (collection: string) => {
-    setSelectedCollections(prev => 
+    setSelectedCollections((prev) =>
       prev.includes(collection)
-        ? prev.filter(c => c !== collection)
+        ? prev.filter((c) => c !== collection)
         : [...prev, collection]
-    )
-  }
+    );
+  };
 
   // Toggle category filter
   const toggleCategory = (category: string) => {
-    setSelectedCategories(prev => 
+    setSelectedCategories((prev) =>
       prev.includes(category)
-        ? prev.filter(c => c !== category)
+        ? prev.filter((c) => c !== category)
         : [...prev, category]
-    )
-  }
+    );
+  };
 
   // Reset all filters
   const resetFilters = () => {
-    setSearchQuery('')
-    setSelectedCollections([])
-    setSelectedCategories([])
-    setPriceRange([0, 10000])
-    setInStockOnly(false)
-    setSortBy('name_asc')
-  }
+    setSearchQuery("");
+    setSelectedCollections([]);
+    setSelectedCategories([]);
+    setPriceRange([0, 10000]);
+    setInStockOnly(false);
+    setSortBy("name_asc");
+  };
 
   return (
     <main className="min-h-screen bg-neutral-50">
       <Navbar />
-      
+
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <h1 className="text-4xl font-light text-center mb-8 text-neutral-900">
           Search Our Products
         </h1>
-        
+
         <div className="flex flex-col md:flex-row gap-8">
           {/* Filters Sidebar */}
           <div className="md:w-64 w-full">
             <div className="bg-white p-6 rounded-xl shadow-md">
               <div className="flex justify-between items-center mb-4">
                 <h2 className="text-lg font-medium">Filters</h2>
-                <Button 
-                  variant="ghost" 
-                  size="sm" 
-                  onClick={resetFilters}
-                >
+                <Button variant="ghost" size="sm" onClick={resetFilters}>
                   Reset
                 </Button>
               </div>
-              
+
               <div className="space-y-6">
                 {/* Collections filter */}
                 <Accordion type="single" collapsible defaultValue="collections">
@@ -210,14 +244,19 @@ export default function SearchPage() {
                     <AccordionTrigger>Collections</AccordionTrigger>
                     <AccordionContent>
                       <div className="space-y-2">
-                        {collections.map(collection => (
-                          <div key={collection} className="flex items-center space-x-2">
-                            <Checkbox 
+                        {collections.map((collection) => (
+                          <div
+                            key={collection}
+                            className="flex items-center space-x-2"
+                          >
+                            <Checkbox
                               id={`collection-${collection}`}
                               checked={selectedCollections.includes(collection)}
-                              onCheckedChange={() => toggleCollection(collection)}
+                              onCheckedChange={() =>
+                                toggleCollection(collection)
+                              }
                             />
-                            <label 
+                            <label
                               htmlFor={`collection-${collection}`}
                               className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                             >
@@ -229,22 +268,29 @@ export default function SearchPage() {
                     </AccordionContent>
                   </AccordionItem>
                 </Accordion>
-                
+
                 {/* Categories filter */}
                 {categories.length > 0 && (
-                  <Accordion type="single" collapsible defaultValue="categories">
+                  <Accordion
+                    type="single"
+                    collapsible
+                    defaultValue="categories"
+                  >
                     <AccordionItem value="categories">
                       <AccordionTrigger>Categories</AccordionTrigger>
                       <AccordionContent>
                         <div className="space-y-2">
-                          {categories.map(category => (
-                            <div key={category} className="flex items-center space-x-2">
-                              <Checkbox 
+                          {categories.map((category) => (
+                            <div
+                              key={category}
+                              className="flex items-center space-x-2"
+                            >
+                              <Checkbox
                                 id={`category-${category}`}
                                 checked={selectedCategories.includes(category)}
                                 onCheckedChange={() => toggleCategory(category)}
                               />
-                              <label 
+                              <label
                                 htmlFor={`category-${category}`}
                                 className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                               >
@@ -257,7 +303,7 @@ export default function SearchPage() {
                     </AccordionItem>
                   </Accordion>
                 )}
-                
+
                 {/* Price range filter */}
                 <div className="space-y-2">
                   <h3 className="text-sm font-medium">Price Range</h3>
@@ -273,15 +319,17 @@ export default function SearchPage() {
                     <span>₹{priceRange[1]}</span>
                   </div>
                 </div>
-                
+
                 {/* In stock filter */}
                 <div className="flex items-center space-x-2">
-                  <Checkbox 
+                  <Checkbox
                     id="in-stock"
                     checked={inStockOnly}
-                    onCheckedChange={(checked) => setInStockOnly(checked as boolean)}
+                    onCheckedChange={(checked) =>
+                      setInStockOnly(checked as boolean)
+                    }
                   />
-                  <label 
+                  <label
                     htmlFor="in-stock"
                     className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                   >
@@ -291,7 +339,7 @@ export default function SearchPage() {
               </div>
             </div>
           </div>
-          
+
           {/* Products grid */}
           <div className="flex-1">
             {/* Search bar and sorting */}
@@ -304,10 +352,7 @@ export default function SearchPage() {
                   className="w-full"
                 />
               </div>
-              <Select
-                value={sortBy}
-                onValueChange={setSortBy}
-              >
+              <Select value={sortBy} onValueChange={setSortBy}>
                 <SelectTrigger className="w-full sm:w-48">
                   <SelectValue placeholder="Sort by" />
                 </SelectTrigger>
@@ -315,18 +360,21 @@ export default function SearchPage() {
                   <SelectItem value="name_asc">Name (A-Z)</SelectItem>
                   <SelectItem value="name_desc">Name (Z-A)</SelectItem>
                   <SelectItem value="price_asc">Price (Low to High)</SelectItem>
-                  <SelectItem value="price_desc">Price (High to Low)</SelectItem>
+                  <SelectItem value="price_desc">
+                    Price (High to Low)
+                  </SelectItem>
                 </SelectContent>
               </Select>
             </div>
-            
+
             {/* Results count */}
             <div className="mb-6">
               <p className="text-neutral-600">
-                {filteredProducts.length} {filteredProducts.length === 1 ? 'product' : 'products'} found
+                {filteredProducts.length}{" "}
+                {filteredProducts.length === 1 ? "product" : "products"} found
               </p>
             </div>
-            
+
             {/* Products grid */}
             {isLoading ? (
               <div className="flex justify-center items-center h-64">
@@ -335,56 +383,31 @@ export default function SearchPage() {
             ) : filteredProducts.length === 0 ? (
               <div className="bg-white p-8 rounded-xl shadow-md text-center">
                 <h3 className="text-lg font-medium mb-2">No products found</h3>
-                <p className="text-neutral-600">Try adjusting your filters or search query</p>
+                <p className="text-neutral-600">
+                  Try adjusting your filters or search query
+                </p>
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filteredProducts.map((product) => (
-                  
-                  <Card 
+                  <Product
                     key={product.id}
-                    className="group overflow-hidden transition-all duration-300 hover:shadow-xl hover:-translate-y-1"
-                  >
-                    <div className="relative overflow-hidden h-64">
-                      <img 
-                        src={product.imageURL} 
-                        alt={product.name} 
-                        className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
-                        loading="lazy"
-                      />
-                      <div className="absolute inset-0 bg-black opacity-0 group-hover:opacity-10 transition-opacity"></div>
-                    </div>
-                    <CardContent className="p-5">
-                      <h3 className="text-lg font-medium text-neutral-800 mb-2">{product.name}</h3>
-                      <p className="text-neutral-600 text-sm mb-3 line-clamp-2">{product.description}</p>
-                      <div className="flex items-center justify-between">
-                        <p className="text-amber-700 font-semibold text-xl">₹{product.price}</p>
-                        <span className={`text-sm ${product.inStock ? 'text-green-600' : 'text-red-600'}`}>
-                          {product.inStock ? 'In Stock' : 'Out of Stock'}
-                        </span>
-                      </div>
-                      {product.collection && (
-                        <div className="mt-3">
-                          <span className="inline-block px-2 py-1 text-xs bg-neutral-100 rounded-full text-neutral-700">
-                            {product.collection}
-                          </span>
-                          {product.category && (
-                            <span className="inline-block ml-2 px-2 py-1 text-xs bg-neutral-100 rounded-full text-neutral-700">
-                              {product.category}
-                            </span>
-                          )}
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
+                    product={{
+                      ...product,
+                      collection:
+                        collectionsMap.get(product.collections) ||
+                        "Unknown Collection",
+                    }}
+                    showCollectionInfo={true}
+                  />
                 ))}
               </div>
             )}
           </div>
         </div>
       </section>
-      
+
       <Footer />
     </main>
-  )
+  );
 }
