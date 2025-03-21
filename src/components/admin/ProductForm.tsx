@@ -41,6 +41,8 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, initialData, collec
   const [categories, setCategories] = useState<Array<{ id: string; name: string }>>([]);
   const [newCategory, setNewCategory] = useState('');
   const [showNewCategoryInput, setShowNewCategoryInput] = useState(false);
+    // Add this with other state declarations at the top
+  const [categoryError, setCategoryError] = useState('');
   useEffect(() => {
     const fetchCategories = async () => {
       try {
@@ -56,22 +58,38 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, initialData, collec
 
   // Add new category handler
   const handleAddNewCategory = async () => {
-    if (!newCategory.trim()) return;
+    const trimmedCategory = newCategory.trim();
+    if (!trimmedCategory) {
+      setCategoryError('Category name cannot be empty');
+      return;
+    }
+    
+    // Check if category already exists (case-insensitive)
+    const categoryExists = categories.some(
+      category => category.name.toLowerCase() === trimmedCategory.toLowerCase()
+    );
+  
+    if (categoryExists) {
+      setCategoryError('This category already exists');
+      return;
+    }
     
     try {
       const response = await fetch('/api/categories', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newCategory.trim() })
+        body: JSON.stringify({ name: trimmedCategory })
       });
       
       const data = await response.json();
       setCategories(prev => [...prev, data]);
       handleChange('category', data.id);
       setNewCategory('');
+      setCategoryError('');
       setShowNewCategoryInput(false);
     } catch (error) {
       console.error('Error adding new category:', error);
+      setCategoryError('Failed to add category');
     }
   };
 
@@ -81,29 +99,39 @@ const ProductForm: React.FC<ProductFormProps> = ({ onSubmit, initialData, collec
       <Label htmlFor="category">Category</Label>
       <div className="flex gap-2">
         {showNewCategoryInput ? (
-          <div className="flex-1 flex gap-2">
-            <Input
-              value={newCategory}
-              onChange={(e) => setNewCategory(e.target.value)}
-              placeholder="Enter new category"
-            />
-            <Button
-              type="button"
-              variant="outline"
-              onClick={handleAddNewCategory}
-            >
-              Add
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => {
-                setShowNewCategoryInput(false);
-                setNewCategory('');
-              }}
-            >
-              Cancel
-            </Button>
+          <div className="flex-1 flex gap-2 flex-col">
+            <div className="flex gap-2">
+              <Input
+                value={newCategory}
+                onChange={(e) => {
+                  setNewCategory(e.target.value);
+                  setCategoryError(''); // Clear error when user types
+                }}
+                placeholder="Enter new category"
+                className={categoryError ? 'border-red-500 focus-visible:ring-red-500' : ''}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleAddNewCategory}
+              >
+                Add
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  setShowNewCategoryInput(false);
+                  setNewCategory('');
+                  setCategoryError('');
+                }}
+              >
+                Cancel
+              </Button>
+            </div>
+            {categoryError && (
+              <span className="text-sm text-red-500">{categoryError}</span>
+            )}
           </div>
         ) : (
           <>

@@ -1,13 +1,11 @@
-// src/app/search/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Slider } from "@/components/ui/slider";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent } from "@/components/ui/card";
 import {
@@ -24,6 +22,7 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion";
 import Product from "@/components/Product";
+import PriceRangeSlider from "@/components/PriceRangeSelector";
 
 interface Product {
   id: string;
@@ -42,62 +41,122 @@ interface Collection {
   name: string;
 }
 
+interface Category {
+  id: string;
+  name: string;
+}
+
 export default function SearchPage() {
+  const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
-  const collectionParam = searchParams.get("collection");
+  
+  // Get initial values from URL params
+  const queryParam = searchParams.get("q") || "";
+  const collectionParam = searchParams.get("collection")?.split(",") || [];
+  const categoryParam = searchParams.get("category")?.split(",") || [];
+  const minPriceParam = searchParams.get("minPrice") ? Number(searchParams.get("minPrice")) : 0;
+  const maxPriceParam = searchParams.get("maxPrice") ? Number(searchParams.get("maxPrice")) : 10000;
+  const inStockParam = searchParams.get("inStock") === "true";
+  const sortParam = searchParams.get("sort") || "name_asc";
 
   const [products, setProducts] = useState<Product[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [collections, setCollections] = useState<string[]>([]);
-  const [categories, setCategories] = useState<string[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [collectionsMap, setCollectionsMap] = useState<Map<string, string>>(
     new Map()
   );
-  // Filter states
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedCollections, setSelectedCollections] = useState<string[]>(
-    collectionParam ? [collectionParam] : []
+  const [collectionsReverseMap, setCollectionsReverseMap] = useState<Map<string, string>>(
+    new Map()
   );
-  const [selectedCategories, setSelectedCategories] = useState<string[]>([]);
-  const [priceRange, setPriceRange] = useState([0, 10000]);
-  const [inStockOnly, setInStockOnly] = useState(false);
-  const [sortBy, setSortBy] = useState("name_asc");
+  
+  // Filter states - initialize from URL params
+  const [searchQuery, setSearchQuery] = useState(queryParam);
+  const [selectedCollections, setSelectedCollections] = useState<string[]>(collectionParam);
+  const [selectedCategories, setSelectedCategories] = useState<string[]>(categoryParam);
+  const [priceRange, setPriceRange] = useState<[number, number]>([minPriceParam, maxPriceParam]);
+  const [inStockOnly, setInStockOnly] = useState(inStockParam);
+  const [sortBy, setSortBy] = useState(sortParam);
+  const [categoriesMap, setCategoriesMap] = useState<Map<string, string>>(
+    new Map()
+  );
+  const [categoriesReverseMap, setCategoriesReverseMap] = useState<Map<string, string>>(
+    new Map()
+  );
+
+  // Debounce function for URL updates
+  const debounce = (func: Function, delay: number) => {
+    let timeoutId: NodeJS.Timeout;
+    return (...args: any[]) => {
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => func(...args), delay);
+    };
+  };
+
+  // Update URL with current filters
+  const updateURL = debounce(() => {
+    const params = new URLSearchParams();
+    
+    if (searchQuery) params.set("q", searchQuery);
+    if (selectedCollections.length > 0) params.set("collection", selectedCollections.join(","));
+    if (selectedCategories.length > 0) params.set("category", selectedCategories.join(","));
+    if (priceRange[0] > 0) params.set("minPrice", priceRange[0].toString());
+    if (priceRange[1] < 10000) params.set("maxPrice", priceRange[1].toString());
+    if (inStockOnly) params.set("inStock", "true");
+    if (sortBy !== "name_asc") params.set("sort", sortBy);
+    
+    router.push(`${pathname}?${params.toString()}`, { scroll: false });
+  }, 300);
 
   // Fetch products from API endpoint
   useEffect(() => {
     const fetchData = async () => {
       setIsLoading(true);
       try {
-        // Fetch both products and collections
-        const [productsRes, collectionsRes] = await Promise.all([
+        // Fetch products, collections, and categories
+        const [productsRes, collectionsRes, categoriesRes] = await Promise.all([
           fetch("/api/products"),
           fetch("/api/collections/getAllCollectionsList"),
+          fetch("/api/categories"),
         ]);
 
-        if (!productsRes.ok || !collectionsRes.ok)
+        if (!productsRes.ok || !collectionsRes.ok || !categoriesRes.ok) {
           throw new Error("Failed to fetch data");
+        }
 
-        const productsData = (await productsRes.json()) as Product[];
-        const collectionsData = (await collectionsRes.json()) as Collection[];
+        const productsData = await productsRes.json();
+        const collectionsData = await collectionsRes.json();
+        const categoriesData = await categoriesRes.json();
 
         // Create collections mapping
         const collectionsMapping = new Map<string, string>();
-        collectionsData.forEach((collection) => {
+        const collectionsReverseMapping = new Map<string, string>();
+        collectionsData.forEach((collection: Collection) => {
           collectionsMapping.set(collection.id, collection.name);
+          collectionsReverseMapping.set(collection.name, collection.id);
         });
 
-        // Get unique categories from products
-        const categoriesSet = new Set<string>();
-        productsData.forEach((product) => {
-          if (product.category) categoriesSet.add(product.category);
+        // Create categories mapping
+        const categoriesMapping = new Map<string, string>();
+        const categoriesReverseMapping = new Map<string, string>();
+        categoriesData.forEach((category: Category) => {
+          categoriesMapping.set(category.id, category.name);
+          categoriesReverseMapping.set(category.name, category.id);
         });
 
         setCollectionsMap(collectionsMapping);
+        setCollectionsReverseMap(collectionsReverseMapping);
+        setCategoriesMap(categoriesMapping);
+        setCategoriesReverseMap(categoriesReverseMapping);
         setProducts(productsData);
         setFilteredProducts(productsData);
-        setCollections(collectionsData.map((c) => c.name));
-        setCategories(Array.from(categoriesSet));
+        setCollections(collectionsData.map((c: Collection) => c.name));
+        setCategories(categoriesData);
+        
+        // Process URL params after loading data
+        processUrlParams(collectionsMapping, categoriesMapping);
       } catch (error) {
         console.error("Error fetching data:", error);
       } finally {
@@ -108,19 +167,40 @@ export default function SearchPage() {
     fetchData();
   }, []);
 
+  // Process URL parameters after data is loaded
+  const processUrlParams = (collectionsMap: Map<string, string>, categoriesMap: Map<string, string>) => {
+    // Handle collection parameter which might be names or IDs
+    if (collectionParam.length > 0) {
+      const processedCollections = collectionParam.map(param => {
+        // Check if param is an ID that exists in our map
+        for (const [id, name] of collectionsMap.entries()) {
+          if (id === param) return name;
+        }
+        // Otherwise, assume it's already a name
+        return param;
+      });
+      setSelectedCollections(processedCollections);
+    }
+
+    // Handle category parameter which might be names or IDs
+    if (categoryParam.length > 0) {
+      setSelectedCategories(categoryParam);
+    }
+  };
+
   // Apply filters
   useEffect(() => {
     let result = [...products];
 
-    // Filter by collections using the mapping
+    // Filter by collections
     if (selectedCollections.length > 0) {
       result = result.filter((product) => {
         const collectionName = collectionsMap.get(product.collections);
-        return collectionName && selectedCollections.includes(collectionName);
+        return selectedCollections.includes(collectionName || "");
       });
     }
 
-    // Keep existing filters
+    // Filter by search query
     if (searchQuery) {
       result = result.filter(
         (product) =>
@@ -129,6 +209,7 @@ export default function SearchPage() {
       );
     }
 
+    // Filter by categories
     if (selectedCategories.length > 0) {
       result = result.filter(
         (product) =>
@@ -151,6 +232,11 @@ export default function SearchPage() {
     result = sortProducts(result, sortBy);
 
     setFilteredProducts(result);
+    
+    // Update URL with current filters
+    if (!isLoading) {
+      updateURL();
+    }
   }, [
     products,
     searchQuery,
@@ -159,8 +245,7 @@ export default function SearchPage() {
     priceRange,
     inStockOnly,
     sortBy,
-    collectionParam,
-    collectionsMap,
+    isLoading
   ]);
 
   // Sort products
@@ -215,13 +300,14 @@ export default function SearchPage() {
     setPriceRange([0, 10000]);
     setInStockOnly(false);
     setSortBy("name_asc");
+    router.push(pathname, { scroll: false });
   };
 
   return (
     <main className="min-h-screen bg-neutral-50">
       <Navbar />
 
-      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 lg:py-24">
         <h1 className="text-4xl font-light text-center mb-8 text-neutral-900">
           Search Our Products
         </h1>
@@ -282,19 +368,23 @@ export default function SearchPage() {
                         <div className="space-y-2">
                           {categories.map((category) => (
                             <div
-                              key={category}
+                              key={category.id}
                               className="flex items-center space-x-2"
                             >
                               <Checkbox
-                                id={`category-${category}`}
-                                checked={selectedCategories.includes(category)}
-                                onCheckedChange={() => toggleCategory(category)}
+                                id={`category-${category.id}`}
+                                checked={selectedCategories.includes(
+                                  category.id
+                                )}
+                                onCheckedChange={() =>
+                                  toggleCategory(category.id)
+                                }
                               />
                               <label
-                                htmlFor={`category-${category}`}
+                                htmlFor={`category-${category.id}`}
                                 className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                               >
-                                {category}
+                                {category.name}
                               </label>
                             </div>
                           ))}
@@ -307,17 +397,14 @@ export default function SearchPage() {
                 {/* Price range filter */}
                 <div className="space-y-2">
                   <h3 className="text-sm font-medium">Price Range</h3>
-                  <Slider
-                    defaultValue={[0, 10000]}
+                  <PriceRangeSlider
+                    min={0}
                     max={10000}
                     step={100}
                     value={priceRange}
-                    onValueChange={setPriceRange}
+                    onChange={setPriceRange}
+                    currency="₹"
                   />
-                  <div className="flex justify-between text-sm text-neutral-500">
-                    <span>₹{priceRange[0]}</span>
-                    <span>₹{priceRange[1]}</span>
-                  </div>
                 </div>
 
                 {/* In stock filter */}
@@ -397,8 +484,13 @@ export default function SearchPage() {
                       collection:
                         collectionsMap.get(product.collections) ||
                         "Unknown Collection",
+                      categoryName: product.category
+                        ? categoriesMap.get(product.category) ||
+                          "Unknown Category"
+                        : undefined,
                     }}
                     showCollectionInfo={true}
+                    showCategoryInfo={true}
                   />
                 ))}
               </div>
